@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학급 명렬표 및 출결·학급 관리 프로그램</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f3ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Noto Sans KR -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- SweetAlert2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Canvas Confetti CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Card Slot Animation */
+        .slot-card {
+            transition: all 0.3s ease-in-out;
+            transform-style: preserve-3d;
+        }
+        .slot-card.spinning {
+            animation: slotSpin 0.15s infinite linear;
+        }
+        @keyframes slotSpin {
+            0% { transform: translateY(-5px) scale(0.98); opacity: 0.8; }
+            50% { transform: translateY(5px) scale(1.02); opacity: 1; }
+            100% { transform: translateY(-5px) scale(0.98); opacity: 0.8; }
+        }
+
+        /* Seat Grid Transitions */
+        .seat-card {
+            transition: all 0.2s ease;
+        }
+        .seat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .seat-selected {
+            ring: 3px solid #6366f1;
+            background-color: #e0e7ff !important;
+        }
+
+        /* Print Specific Styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            body {
+                background: white;
+                color: black;
+            }
+            .shadow-sm, .shadow-md, .shadow-lg {
+                box-shadow: none !important;
+            }
+            .border {
+                border-color: #cbd5e1 !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Top Header -->
+    <header class="bg-indigo-700 text-white shadow-md no-print sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- App Title -->
+                <div class="flex items-center space-x-3">
+                    <div class="bg-white/10 p-2.5 rounded-xl backdrop-blur-sm">
+                        <i class="fa-solid fa-graduation-cap text-2xl text-amber-300"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-xl tracking-tight leading-tight">학급 명렬표 & 통합 관리</h1>
+                        <p class="text-xs text-indigo-200">스마트 출결·발표자·모둠·좌석·수행평가 시스템</p>
+                    </div>
+                </div>
+
+                <!-- Quick Action Buttons -->
+                <div class="flex items-center space-x-2">
+                    <button onclick="saveToLocalStorage()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-indigo-100 hover:text-white px-3 py-1.5 rounded-lg border border-indigo-400/30 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        <span class="hidden sm:inline">수동 저장</span>
+                    </button>
+                    <button onclick="openAddStudentModal()" class="text-xs bg-amber-400 hover:bg-amber-300 text-indigo-950 font-semibold px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-plus"></i>
+                        <span>학생 추가</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Real-time Attendance Stats Banner -->
+    <section class="bg-white border-b border-slate-200 shadow-sm no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <!-- Total -->
+                <div class="flex items-center p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center mr-3 font-bold">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-slate-500">총 인원</div>
+                        <div class="text-lg font-bold text-slate-800"><span id="stat-total">0</span>명</div>
+                    </div>
+                </div>
+
+                <!-- Present -->
+                <div class="flex items-center p-2.5 bg-emerald-50 rounded-xl border border-emerald-100">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center mr-3 font-bold">
+                        <i class="fa-solid fa-user-check"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-emerald-700">출석</div>
+                        <div class="text-lg font-bold text-emerald-700"><span id="stat-present">0</span>명</div>
+                    </div>
+                </div>
+
+                <!-- Late -->
+                <div class="flex items-center p-2.5 bg-amber-50 rounded-xl border border-amber-100">
+                    <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center mr-3 font-bold">
+                        <i class="fa-solid fa-clock"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-amber-700">지각</div>
+                        <div class="text-lg font-bold text-amber-700"><span id="stat-late">0</span>명</div>
+                    </div>
+                </div>
+
+                <!-- Early Leave -->
+                <div class="flex items-center p-2.5 bg-orange-50 rounded-xl border border-orange-100">
+                    <div class="w-10 h-10 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center mr-3 font-bold">
+                        <i class="fa-solid fa-person-walking-arrow-right"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-orange-700">조퇴</div>
+                        <div class="text-lg font-bold text-orange-700"><span id="stat-early">0</span>명</div>
+                    </div>
+                </div>
+
+                <!-- Absent -->
+                <div class="flex items-center p-2.5 bg-rose-50 rounded-xl border border-rose-100 col-span-2 sm:col-span-1">
+                    <div class="w-10 h-10 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center mr-3 font-bold">
+                        <i class="fa-solid fa-user-xmark"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-rose-700">결석</div>
+                        <div class="text-lg font-bold text-rose-700"><span id="stat-absent">0</span>명</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav class="bg-white border-b border-slate-200 no-print sticky top-16 z-30 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-1 sm:space-x-4 overflow-x-auto py-2 scrollbar-none">
+                <button onclick="switchTab('roster')" id="tab-btn-roster" class="tab-btn active px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition bg-indigo-50 text-indigo-700">
+                    <i class="fa-solid fa-list-ol"></i>
+                    <span>명단 및 출결</span>
+                </button>
+                <button onclick="switchTab('picker')" id="tab-btn-picker" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition text-slate-600 hover:bg-slate-100">
+                    <i class="fa-solid fa-bullseye"></i>
+                    <span>발표자 추첨</span>
+                </button>
+                <button onclick="switchTab('groups')" id="tab-btn-groups" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition text-slate-600 hover:bg-slate-100">
+                    <i class="fa-solid fa-puzzle-piece"></i>
+                    <span>모둠 배정</span>
+                </button>
+                <button onclick="switchTab('seating')" id="tab-btn-seating" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition text-slate-600 hover:bg-slate-100">
+                    <i class="fa-solid fa-chair"></i>
+                    <span>좌석 배치도</span>
+                </button>
+                <button onclick="switchTab('evaluation')" id="tab-btn-evaluation" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition text-slate-600 hover:bg-slate-100">
+                    <i class="fa-solid fa-chart-simple"></i>
+                    <span>수행평가 기록</span>
+                </button>
+                <button onclick="switchTab('export')" id="tab-btn-export" class="tab-btn px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition text-slate-600 hover:bg-slate-100">
+                    <i class="fa-solid fa-file-export"></i>
+                    <span>데이터 내보내기</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- ================= TAB 1: ROSTER & ATTENDANCE ================= -->
+        <section id="tab-roster" class="tab-content space-y-4">
+            <!-- Roster Controls Bar -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <!-- Search & Status Filter -->
+                <div class="flex flex-wrap items-center gap-2 flex-1">
+                    <div class="relative min-w-[200px] flex-1 sm:flex-initial">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" id="roster-search" oninput="renderRosterTable()" placeholder="이름 검색..." class="w-full pl-9 pr-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+                    </div>
+
+                    <div class="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-medium">
+                        <button onclick="setRosterFilter('ALL')" id="filter-btn-ALL" class="filter-btn px-2.5 py-1.5 rounded-lg bg-white text-indigo-600 shadow-xs">전체</button>
+                        <button onclick="setRosterFilter('출석')" id="filter-btn-출석" class="filter-btn px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-emerald-600">출석만</button>
+                        <button onclick="setRosterFilter('지각')" id="filter-btn-지각" class="filter-btn px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-amber-600">지각</button>
+                        <button onclick="setRosterFilter('조퇴')" id="filter-btn-조퇴" class="filter-btn px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-orange-600">조퇴</button>
+                        <button onclick="setRosterFilter('결석')" id="filter-btn-결석" class="filter-btn px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-rose-600">결석</button>
+                    </div>
+                </div>
+
+                <!-- Batch Actions -->
+                <div class="flex items-center gap-2">
+                    <button onclick="openBatchModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-users-gear"></i>
+                        <span>명단 일괄 생성</span>
+                    </button>
+                    <button onclick="resetAllAttendance()" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>전원 출석 처리</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Student Data Table -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                <th class="py-3.5 px-4 w-16 text-center">번호</th>
+                                <th class="py-3.5 px-4 w-32">이름</th>
+                                <th class="py-3.5 px-4 w-24 text-center">성별</th>
+                                <th class="py-3.5 px-4 min-w-[280px]">출결 상태 (원클릭 변경)</th>
+                                <th class="py-3.5 px-4">비고</th>
+                                <th class="py-3.5 px-4 w-20 text-center">관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="roster-tbody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="roster-empty-state" class="hidden p-12 text-center text-slate-400">
+                    <i class="fa-regular fa-folder-open text-4xl mb-3 text-slate-300"></i>
+                    <p class="text-sm">검색 결과 또는 등록된 학생이 없습니다.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 2: RANDOM SELECTOR ================= -->
+        <section id="tab-picker" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Picker Settings & Action -->
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+                    <div class="border-b border-slate-100 pb-4">
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-indigo-600"></i>
+                            추첨 설정
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-1">발표자나 순번을 공정하게 무작위로 추첨합니다.</p>
+                    </div>
+
+                    <!-- Options -->
+                    <div class="space-y-4 text-xs font-medium">
+                        <div>
+                            <label class="block text-slate-700 font-semibold mb-1.5">뽑을 인원수</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="pick-count" value="1" min="1" max="10" class="w-20 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <span class="text-slate-500">명</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 pt-2 border-t border-slate-100">
+                            <label class="flex items-center gap-2.5 cursor-pointer">
+                                <input type="checkbox" id="pick-only-present" checked class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300">
+                                <span class="text-slate-700">출석 학생만 대상 (결석/조퇴 제외)</span>
+                            </label>
+                            <label class="flex items-center gap-2.5 cursor-pointer">
+                                <input type="checkbox" id="pick-exclude-previous" checked class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300">
+                                <span class="text-slate-700">이미 당첨된 학생 제외 (중복 방지)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Pick Button -->
+                    <button onclick="startRandomPick()" class="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold rounded-xl shadow-md transition transform active:scale-95 flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-dice text-lg"></i>
+                        <span>발표자 추첨 시작!</span>
+                    </button>
+                </div>
+
+                <!-- Display Stage -->
+                <div class="lg:col-span-2 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 rounded-2xl p-6 sm:p-10 text-white shadow-xl flex flex-col items-center justify-center min-h-[360px] relative overflow-hidden">
+                    <div class="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                    
+                    <div id="picker-stage-initial" class="text-center space-y-3 z-10">
+                        <div class="w-20 h-20 mx-auto rounded-full bg-white/10 flex items-center justify-center text-amber-400 text-3xl shadow-inner border border-white/10">
+                            <i class="fa-solid fa-award"></i>
+                        </div>
+                        <h3 class="text-xl font-bold">누가 당첨될까요?</h3>
+                        <p class="text-xs text-indigo-200">추첨 버튼을 누르면 랜덤 뽑기가 시작됩니다.</p>
+                    </div>
+
+                    <!-- Selected Winners Display Grid -->
+                    <div id="picker-stage-result" class="hidden w-full z-10">
+                        <div class="text-center mb-6">
+                            <span class="px-3 py-1 bg-amber-400/20 text-amber-300 rounded-full text-xs font-bold border border-amber-400/30">🎯 추첨 결과</span>
+                        </div>
+                        <div id="winner-cards-container" class="flex flex-wrap justify-center gap-4">
+                            <!-- Winner Cards Populated Dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pick History List -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i>
+                        추첨 기록
+                    </h3>
+                    <button onclick="clearPickHistory()" class="text-xs text-slate-400 hover:text-rose-600 transition">
+                        <i class="fa-solid fa-trash-can mr-1"></i>기록 삭제
+                    </button>
+                </div>
+                <div id="pick-history-list" class="flex flex-wrap gap-2 text-xs">
+                    <span class="text-slate-400 text-xs italic">아직 추첨된 기록이 없습니다.</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 3: GROUP GENERATOR ================= -->
+        <section id="tab-groups" class="tab-content hidden space-y-6">
+            <!-- Group Settings Controls -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-semibold text-slate-700">모둠 개수:</label>
+                        <select id="group-count-select" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="2">2개 모둠</option>
+                            <option value="3">3개 모둠</option>
+                            <option value="4" selected>4개 모둠</option>
+                            <option value="5">5개 모둠</option>
+                            <option value="6">6개 모둠</option>
+                            <option value="7">7개 모둠</option>
+                            <option value="8">8개 모둠</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-semibold text-slate-700">배정 방식:</label>
+                        <select id="group-mode-select" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="gender">남녀 균등 무작위 배정</option>
+                            <option value="random">완전 무작위 혼합 배정</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="generateGroups()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-shuffle"></i>
+                    <span>모둠 자동 배정 실행</span>
+                </button>
+            </div>
+
+            <!-- Groups Cards Grid -->
+            <div id="groups-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Dynamic Group Cards -->
+            </div>
+        </section>
+
+        <!-- ================= TAB 4: SEATING CHART ================= -->
+        <section id="tab-seating" class="tab-content hidden space-y-6">
+            <!-- Seating Configuration Controls -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 no-print">
+                <div class="flex flex-wrap items-center gap-4 text-xs">
+                    <div class="flex items-center gap-2">
+                        <label class="font-semibold text-slate-700">배치 열(가로):</label>
+                        <input type="number" id="seat-cols" value="6" min="2" max="10" class="w-16 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center font-bold">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="font-semibold text-slate-700">배치 행(세로):</label>
+                        <input type="number" id="seat-rows" value="5" min="2" max="10" class="w-16 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center font-bold">
+                    </div>
+                    <div class="text-slate-400">|</div>
+                    <p class="text-slate-500 italic">💡 두 학생을 연속으로 클릭하면 서로 좌석을 맞바꿀 수 있습니다.</p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="randomizeSeating()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>무작위 좌석 배치</span>
+                    </button>
+                    <button onclick="window.print()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-print"></i>
+                        <span>인쇄</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Blackboard Screen Representation -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                <div class="w-3/4 max-w-md mx-auto py-3 bg-slate-800 text-white text-center font-bold text-sm tracking-widest rounded-xl shadow-inner border-2 border-slate-700 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-chalkboard text-amber-400"></i>
+                    <span>[ 교 탁 / 칠 판 ]</span>
+                </div>
+
+                <!-- Seats Grid -->
+                <div id="seating-grid-container" class="overflow-x-auto py-2">
+                    <!-- Dynamic Seat Grid Generated Here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 5: EVALUATION SCORES ================= -->
+        <section id="tab-evaluation" class="tab-content hidden space-y-4">
+            <!-- Evaluation Overview -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-800">수행평가 점수 관리</h2>
+                    <p class="text-xs text-slate-500">학생별 영역 점수를 입력하면 총점과 학급 평균이 자동 계산됩니다.</p>
+                </div>
+                <div class="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-xl text-center">
+                    <span class="text-xs font-medium text-indigo-600 block">학급 전체 총점 평균</span>
+                    <span id="eval-class-avg" class="text-xl font-extrabold text-indigo-700">0.0 점</span>
+                </div>
+            </div>
+
+            <!-- Scores Table -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                <th class="py-3 px-4 w-16 text-center">번호</th>
+                                <th class="py-3 px-4 w-28">이름</th>
+                                <th class="py-3 px-4 w-28 text-center">항목1 (30점)</th>
+                                <th class="py-3 px-4 w-28 text-center">항목2 (30점)</th>
+                                <th class="py-3 px-4 w-28 text-center">항목3 (40점)</th>
+                                <th class="py-3 px-4 w-24 text-center">총점 (100점)</th>
+                                <th class="py-3 px-4 text-center">평가 등급</th>
+                            </tr>
+                        </thead>
+                        <tbody id="evaluation-tbody" class="divide-y divide-slate-100 text-sm">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 6: DATA EXPORT & BACKUP ================= -->
+        <section id="tab-export" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Copy for Excel/HWP -->
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                            엑셀 / 한글(HWP) 붙여넣기용 복사
+                        </h3>
+                    </div>
+                    <p class="text-xs text-slate-500">아래 텍스트 박스의 내용은 탭 구분자로 형식화되어 있어 Ctrl+C 후 엑셀이나 한글 표에 그대로 붙여넣을 수 있습니다.</p>
+                    <textarea id="export-tsv-text" readonly class="w-full h-48 p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-700 resize-none focus:outline-none"></textarea>
+                    
+                    <div class="flex gap-2">
+                        <button onclick="copyTsvToClipboard()" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-2">
+                            <i class="fa-regular fa-copy"></i>
+                            <span>클립보드로 복사</span>
+                        </button>
+                        <button onclick="downloadCSV()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition flex items-center gap-2">
+                            <i class="fa-solid fa-file-csv"></i>
+                            <span>CSV 다운로드</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- JSON Backup & Restore -->
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div class="border-b border-slate-100 pb-3">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-database text-indigo-600"></i>
+                            백업 데이터 관리 및 초기화
+                        </h3>
+                    </div>
+                    
+                    <div class="space-y-3 pt-2">
+                        <div>
+                            <span class="text-xs font-semibold text-slate-700 block mb-1">데이터 파일 백업 (JSON)</span>
+                            <button onclick="downloadJSONBackup()" class="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-download"></i>
+                                <span>전체 데이터 백업 파일 다운로드</span>
+                            </button>
+                        </div>
+
+                        <div class="pt-2 border-t border-slate-100">
+                            <span class="text-xs font-semibold text-slate-700 block mb-1">백업 파일 복원 (JSON)</span>
+                            <input type="file" id="import-file-input" accept=".json" onchange="importJSONBackup(event)" class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200">
+                        </div>
+
+                        <div class="pt-4 border-t border-slate-100">
+                            <button onclick="confirmResetDemoData()" class="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <span>데모 샘플 데이터로 리셋</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL: Add Single Student -->
+    <div id="modal-add-student" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base">학생 등록</h3>
+                <button onclick="closeAddStudentModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <form onsubmit="handleAddStudentSubmit(event)" class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">번호</label>
+                    <input type="number" id="add-num" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">이름</label>
+                    <input type="text" id="add-name" required placeholder="예: 홍길동" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">성별</label>
+                    <select id="add-gender" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="남">남성</option>
+                        <option value="여">여성</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">비고 (선택)</label>
+                    <input type="text" id="add-notes" placeholder="특이사항 메모" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3">
+                    <button type="button" onclick="closeAddStudentModal()" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl">취소</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm">등록</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: Batch Generation -->
+    <div id="modal-batch" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base">명단 일괄 생성</h3>
+                <button onclick="closeBatchModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <p class="text-xs text-slate-500">원하는 학생 수만큼 번호와 임시 이름(학생1, 학생2...)으로 일괄 생성합니다. 생성 후 이름을 개별 수정할 수 있습니다.</p>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">생성할 학생 총 수</label>
+                    <input type="number" id="batch-count" value="25" min="1" max="50" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">기존 명단 처리</label>
+                    <select id="batch-overwrite" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl">
+                        <option value="overwrite">기존 명단 지우고 새 명단 생성</option>
+                        <option value="append">기존 명단 뒤에 추가</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-3">
+                <button onclick="closeBatchModal()" class="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl text-xs">취소</button>
+                <button onclick="executeBatchCreate()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-sm">일괄 생성 실행</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Default Pre-loaded Demo Data (15 Students)
+        const DEFAULT_DEMO_STUDENTS = [
+            { id: 1, number: 1, name: "김민준", gender: "남", status: "출석", score1: 28, score2: 27, score3: 38, notes: "학급 반장" },
+            { id: 2, number: 2, name: "이서연", gender: "여", status: "출석", score1: 30, score2: 29, score3: 40, notes: "부반장" },
+            { id: 3, number: 3, name: "박도현", gender: "남", status: "출석", score1: 25, score2: 26, score3: 35, notes: "" },
+            { id: 4, number: 4, name: "최지우", gender: "여", status: "지각", score1: 27, score2: 28, score3: 36, notes: "병가 지각" },
+            { id: 5, number: 5, name: "정예준", gender: "남", status: "출석", score1: 29, score2: 25, score3: 37, notes: "" },
+            { id: 6, number: 6, name: "강윤서", gender: "여", status: "출석", score1: 26, score2: 30, score3: 39, notes: "" },
+            { id: 7, number: 7, name: "조하준", gender: "남", status: "조퇴", score1: 22, score2: 24, score3: 30, notes: "병원 진료" },
+            { id: 8, number: 8, name: "윤채원", gender: "여", status: "출석", score1: 30, score2: 30, score3: 38, notes: "" },
+            { id: 9, number: 9, name: "장현우", gender: "남", status: "출석", score1: 24, score2: 25, score3: 32, notes: "" },
+            { id: 10, number: 10, name: "임수아", gender: "여", status: "결석", score1: 0, score2: 0, score3: 0, notes: "감기 몸살" },
+            { id: 11, number: 11, name: "한지호", gender: "남", status: "출석", score1: 27, score2: 28, score3: 34, notes: "" },
+            { id: 12, number: 12, name: "오지민", gender: "여", status: "출석", score1: 29, score2: 27, score3: 37, notes: "" },
+            { id: 13, number: 13, name: "서건우", gender: "남", status: "출석", score1: 26, score2: 26, score3: 35, notes: "" },
+            { id: 14, number: 14, name: "신유나", gender: "여", status: "출석", score1: 28, score2: 29, score3: 39, notes: "" },
+            { id: 15, number: 15, name: "권민서", gender: "여", status: "출석", score1: 25, score2: 28, score3: 36, notes: "" }
+        ];
+
+        // Global State Variables
+        let students = [];
+        let pickHistory = [];
+        let currentFilter = 'ALL';
+        let activeTab = 'roster';
+        let selectedSeatIndex = null;
+        let seatingArrangement = []; // Array of student IDs mapped to seat indexes
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromLocalStorage();
+            renderStats();
+            renderRosterTable();
+            renderExportTSV();
+        });
+
+        function saveToLocalStorage() {
+            localStorage.setItem('classRosterData', JSON.stringify(students));
+            localStorage.setItem('classPickHistory', JSON.stringify(pickHistory));
+            localStorage.setItem('classSeating', JSON.stringify(seatingArrangement));
+            
+            // Toast alert
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 1500,
+                timerProgressBar: true
+            });
+            Toast.fire({
+                icon: 'success',
+                title: '데이터가 저장되었습니다.'
+            });
+        }
+
+        function loadFromLocalStorage() {
+            const savedData = localStorage.getItem('classRosterData');
+            if (savedData) {
+                try {
+                    students = JSON.parse(savedData);
+                } catch(e) {
+                    students = [...DEFAULT_DEMO_STUDENTS];
+                }
+            } else {
+                students = [...DEFAULT_DEMO_STUDENTS];
+            }
+
+            const savedHistory = localStorage.getItem('classPickHistory');
+            if (savedHistory) {
+                try { pickHistory = JSON.parse(savedHistory); } catch(e) { pickHistory = []; }
+            }
+
+            const savedSeating = localStorage.getItem('classSeating');
+            if (savedSeating) {
+                try { seatingArrangement = JSON.parse(savedSeating); } catch(e) { seatingArrangement = []; }
+            }
+        }
+
+        function switchTab(tabId) {
+            activeTab = tabId;
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-indigo-50', 'text-indigo-700', 'active');
+                btn.classList.add('text-slate-600');
+            });
+
+            const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+            const activeContent = document.getElementById(`tab-${tabId}`);
+            
+            if (activeBtn && activeContent) {
+                activeBtn.classList.add('bg-indigo-50', 'text-indigo-700', 'active');
+                activeBtn.classList.remove('text-slate-600');
+                activeContent.classList.remove('hidden');
+            }
+
+            // Tab-specific initializers
+            if (tabId === 'roster') renderRosterTable();
+            if (tabId === 'picker') renderPickHistory();
+            if (tabId === 'groups') generateGroups();
+            if (tabId === 'seating') renderSeatingGrid();
+            if (tabId === 'evaluation') renderEvaluationTable();
+            if (tabId === 'export') renderExportTSV();
+        }
+
+        function renderStats() {
+            const total = students.length;
+            const present = students.filter(s => s.status === '출석').length;
+            const late = students.filter(s => s.status === '지각').length;
+            const early = students.filter(s => s.status === '조퇴').length;
+            const absent = students.filter(s => s.status === '결석').length;
+
+            document.getElementById('stat-total').textContent = total;
+            document.getElementById('stat-present').textContent = present;
+            document.getElementById('stat-late').textContent = late;
+            document.getElementById('stat-early').textContent = early;
+            document.getElementById('stat-absent').textContent = absent;
+        }
+
+        function setRosterFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'text-indigo-600', 'shadow-xs');
+                btn.classList.add('text-slate-600');
+            });
+            const activeBtn = document.getElementById(`filter-btn-${filter}`);
+            if (activeBtn) {
+                activeBtn.classList.add('bg-white', 'text-indigo-600', 'shadow-xs');
+                activeBtn.classList.remove('text-slate-600');
+            }
+            renderRosterTable();
+        }
+
+        function renderRosterTable() {
+            const tbody = document.getElementById('roster-tbody');
+            const searchVal = document.getElementById('roster-search').value.trim().toLowerCase();
+            const emptyState = document.getElementById('roster-empty-state');
+
+            // Sort students by number
+            students.sort((a, b) => Number(a.number) - Number(b.number));
+
+            let filtered = students.filter(s => {
+                const matchesFilter = (currentFilter === 'ALL') || (s.status === currentFilter);
+                const matchesSearch = s.name.toLowerCase().includes(searchVal) || String(s.number).includes(searchVal);
+                return matchesFilter && matchesSearch;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                renderStats();
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            tbody.innerHTML = filtered.map(s => `
+                <tr class="hover:bg-slate-50/80 transition">
+                    <td class="py-3 px-4 text-center font-bold text-slate-500">${s.number}</td>
+                    <td class="py-3 px-4 font-semibold text-slate-800">
+                        <input type="text" value="${escapeHtml(s.name)}" onchange="updateStudentField(${s.id}, 'name', this.value)" class="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-none px-1 py-0.5 rounded font-medium text-slate-800 w-full">
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <span onclick="toggleGender(${s.id})" class="cursor-pointer inline-block px-2 py-0.5 rounded-md text-xs font-semibold ${s.gender === '남' ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-pink-50 text-pink-600 border border-pink-200'}">
+                            ${s.gender}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <button onclick="setStudentStatus(${s.id}, '출석')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${s.status === '출석' ? 'bg-emerald-500 text-white shadow-xs' : 'bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}">출석</button>
+                            <button onclick="setStudentStatus(${s.id}, '지각')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${s.status === '지각' ? 'bg-amber-500 text-white shadow-xs' : 'bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600'}">지각</button>
+                            <button onclick="setStudentStatus(${s.id}, '조퇴')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${s.status === '조퇴' ? 'bg-orange-500 text-white shadow-xs' : 'bg-slate-100 text-slate-500 hover:bg-orange-50 hover:text-orange-600'}">조퇴</button>
+                            <button onclick="setStudentStatus(${s.id}, '결석')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${s.status === '결석' ? 'bg-rose-500 text-white shadow-xs' : 'bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600'}">결석</button>
+                        </div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <input type="text" value="${escapeHtml(s.notes || '')}" placeholder="비고 입력..." onchange="updateStudentField(${s.id}, 'notes', this.value)" class="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-none px-1 py-0.5 rounded text-xs text-slate-600 w-full">
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <button onclick="deleteStudent(${s.id})" class="p-1.5 text-slate-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50">
+                            <i class="fa-regular fa-trash-can text-sm"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            renderStats();
+        }
+
+        function setStudentStatus(id, newStatus) {
+            const student = students.find(s => s.id === id);
+            if (student) {
+                student.status = newStatus;
+                renderRosterTable();
+                saveToLocalStorage();
+            }
+        }
+
+        function toggleGender(id) {
+            const student = students.find(s => s.id === id);
+            if (student) {
+                student.gender = student.gender === '남' ? '여' : '남';
+                renderRosterTable();
+                saveToLocalStorage();
+            }
+        }
+
+        function updateStudentField(id, field, value) {
+            const student = students.find(s => s.id === id);
+            if (student) {
+                student[field] = value;
+                saveToLocalStorage();
+            }
+        }
+
+        function deleteStudent(id) {
+            Swal.fire({
+                title: '학생 삭제',
+                text: "이 학생을 명단에서 삭제하시겠습니까?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#4f46e5',
+                cancelButtonColor: '#94a3b8',
+                confirmButtonText: '삭제',
+                cancelButtonText: '취소'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    students = students.filter(s => s.id !== id);
+                    renderRosterTable();
+                    saveToLocalStorage();
+                }
+            });
+        }
+
+        function resetAllAttendance() {
+            students.forEach(s => s.status = '출석');
+            renderRosterTable();
+            saveToLocalStorage();
+        }
+
+        // Student Add Modal Logic
+        function openAddStudentModal() {
+            const nextNum = students.length > 0 ? Math.max(...students.map(s => s.number)) + 1 : 1;
+            document.getElementById('add-num').value = nextNum;
+            document.getElementById('add-name').value = '';
+            document.getElementById('add-notes').value = '';
+            document.getElementById('modal-add-student').classList.remove('hidden');
+        }
+
+        function closeAddStudentModal() {
+            document.getElementById('modal-add-student').classList.add('hidden');
+        }
+
+        function handleAddStudentSubmit(e) {
+            e.preventDefault();
+            const num = parseInt(document.getElementById('add-num').value);
+            const name = document.getElementById('add-name').value.trim();
+            const gender = document.getElementById('add-gender').value;
+            const notes = document.getElementById('add-notes').value.trim();
+
+            if (!name) return;
+
+            const newStudent = {
+                id: Date.now(),
+                number: num,
+                name: name,
+                gender: gender,
+                status: '출석',
+                score1: 0,
+                score2: 0,
+                score3: 0,
+                notes: notes
+            };
+
+            students.push(newStudent);
+            closeAddStudentModal();
+            renderRosterTable();
+            saveToLocalStorage();
+        }
+
+        // Batch Creation Modal Logic
+        function openBatchModal() {
+            document.getElementById('modal-batch').classList.remove('hidden');
+        }
+
+        function closeBatchModal() {
+            document.getElementById('modal-batch').classList.add('hidden');
+        }
+
+        function executeBatchCreate() {
+            const count = parseInt(document.getElementById('batch-count').value);
+            const mode = document.getElementById('batch-overwrite').value;
+
+            if (mode === 'overwrite') {
+                students = [];
+            }
+
+            const startNum = students.length > 0 ? Math.max(...students.map(s => s.number)) + 1 : 1;
+
+            for (let i = 0; i < count; i++) {
+                const num = startNum + i;
+                students.push({
+                    id: Date.now() + i,
+                    number: num,
+                    name: `학생 ${num}`,
+                    gender: i % 2 === 0 ? '남' : '여',
+                    status: '출석',
+                    score1: 0,
+                    score2: 0,
+                    score3: 0,
+                    notes: ''
+                });
+            }
+
+            closeBatchModal();
+            renderRosterTable();
+            saveToLocalStorage();
+        }
+
+        let isPicking = false;
+
+        function startRandomPick() {
+            if (isPicking) return;
+
+            const count = parseInt(document.getElementById('pick-count').value) || 1;
+            const onlyPresent = document.getElementById('pick-only-present').checked;
+            const excludePrevious = document.getElementById('pick-exclude-previous').checked;
+
+            // Filter Candidates
+            let candidates = students.filter(s => {
+                if (onlyPresent && s.status !== '출석') return false;
+                if (excludePrevious && pickHistory.includes(s.name)) return false;
+                return true;
+            });
+
+            if (candidates.length === 0) {
+                Swal.fire({
+                    icon: 'info',
+                    title: '추첨 대상이 없습니다!',
+                    text: '조건에 맞는 학생이 없거나 모든 학생이 이미 추첨되었습니다.',
+                    confirmButtonColor: '#4f46e5'
+                });
+                return;
+            }
+
+            isPicking = true;
+            const container = document.getElementById('winner-cards-container');
+            const stageInitial = document.getElementById('picker-stage-initial');
+            const stageResult = document.getElementById('picker-stage-result');
+
+            stageInitial.classList.add('hidden');
+            stageResult.classList.remove('hidden');
+            container.innerHTML = '';
+
+            // Render Slot Placeholder Cards
+            const pickTargetCount = Math.min(count, candidates.length);
+            let activeCards = [];
+
+            for (let i = 0; i < pickTargetCount; i++) {
+                const card = document.createElement('div');
+                card.className = "slot-card spinning bg-white/10 backdrop-blur-md border border-white/20 px-6 py-5 rounded-2xl text-center min-w-[140px]";
+                card.innerHTML = `
+                    <div class="text-xs text-amber-300 font-medium mb-1">발표자 ${i + 1}</div>
+                    <div class="card-name text-2xl font-extrabold text-white">???</div>
+                `;
+                container.appendChild(card);
+                activeCards.push(card);
+            }
+
+            // Shuffle Candidates
+            let shuffled = [...candidates].sort(() => 0.5 - Math.random());
+            let winners = shuffled.slice(0, pickTargetCount);
+
+            // Animation Slot Roll Effect
+            let rollInterval = setInterval(() => {
+                activeCards.forEach(card => {
+                    const tempRandom = candidates[Math.floor(Math.random() * candidates.length)];
+                    card.querySelector('.card-name').textContent = tempRandom.name;
+                });
+            }, 80);
+
+            // Final Reveal
+            setTimeout(() => {
+                clearInterval(rollInterval);
+                isPicking = false;
+
+                winners.forEach((winner, index) => {
+                    const card = activeCards[index];
+                    card.classList.remove('spinning');
+                    card.className = "bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900 shadow-xl px-8 py-6 rounded-2xl text-center min-w-[160px] transform scale-105 border-2 border-white/40 transition";
+                    card.innerHTML = `
+                        <div class="text-xs font-bold text-amber-950 uppercase tracking-wider mb-1">🎉 당첨 ${index + 1}</div>
+                        <div class="text-3xl font-extrabold text-slate-950 mb-1">${winner.name}</div>
+                        <div class="text-xs font-semibold text-amber-900">${winner.number}번</div>
+                    `;
+
+                    // Add to History
+                    if (!pickHistory.includes(winner.name)) {
+                        pickHistory.push(winner.name);
+                    }
+                });
+
+                // Trigger Confetti Animation
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+
+                renderPickHistory();
+                saveToLocalStorage();
+            }, 1800);
+        }
+
+        function renderPickHistory() {
+            const list = document.getElementById('pick-history-list');
+            if (pickHistory.length === 0) {
+                list.innerHTML = '<span class="text-slate-400 text-xs italic">아직 추첨된 기록이 없습니다.</span>';
+                return;
+            }
+
+            list.innerHTML = pickHistory.map((name, index) => `
+                <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100 flex items-center gap-1.5">
+                    <span class="text-[10px] text-indigo-400">#${index + 1}</span>
+                    <span>${escapeHtml(name)}</span>
+                </span>
+            `).join('');
+        }
+
+        function clearPickHistory() {
+            pickHistory = [];
+            renderPickHistory();
+            saveToLocalStorage();
+        }
+
+        function generateGroups() {
+            const groupCount = parseInt(document.getElementById('group-count-select').value) || 4;
+            const mode = document.getElementById('group-mode-select').value;
+            const container = document.getElementById('groups-container');
+
+            // Filter present students
+            const activeStudents = students.filter(s => s.status !== '결석');
+            if (activeStudents.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400">배정할 학생이 없습니다.</div>';
+                return;
+            }
+
+            let groups = Array.from({ length: groupCount }, () => []);
+
+            if (mode === 'gender') {
+                // Gender Balanced Random Distribution
+                const males = activeStudents.filter(s => s.gender === '남').sort(() => Math.random() - 0.5);
+                const females = activeStudents.filter(s => s.gender === '여').sort(() => Math.random() - 0.5);
+
+                males.forEach((m, idx) => groups[idx % groupCount].push(m));
+                females.forEach((f, idx) => groups[(groupCount - 1 - (idx % groupCount))] .push(f));
+            } else {
+                // Pure Random
+                const shuffled = [...activeStudents].sort(() => Math.random() - 0.5);
+                shuffled.forEach((s, idx) => groups[idx % groupCount].push(s));
+            }
+
+            // Render Groups Cards
+            container.innerHTML = groups.map((grp, gIdx) => `
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white text-xs font-extrabold flex items-center justify-center">${gIdx + 1}</span>
+                            <span>모둠 ${gIdx + 1}</span>
+                        </h3>
+                        <span class="text-xs text-slate-400 font-medium">${grp.length}명</span>
+                    </div>
+
+                    <div class="space-y-1.5 min-h-[120px]">
+                        ${grp.map(s => `
+                            <div class="p-2 bg-slate-50 rounded-xl flex items-center justify-between text-xs hover:bg-indigo-50/50 transition">
+                                <span class="font-semibold text-slate-800">${s.number}. ${escapeHtml(s.name)}</span>
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${s.gender === '남' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}">${s.gender}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderSeatingGrid() {
+            const cols = parseInt(document.getElementById('seat-cols').value) || 6;
+            const rows = parseInt(document.getElementById('seat-rows').value) || 5;
+            const container = document.getElementById('seating-grid-container');
+
+            const totalSeats = cols * rows;
+
+            // Ensure arrangement matches dimensions
+            if (seatingArrangement.length !== totalSeats) {
+                seatingArrangement = new Array(totalSeats).fill(null);
+                // Pre-populate with current student IDs
+                students.forEach((s, idx) => {
+                    if (idx < totalSeats) seatingArrangement[idx] = s.id;
+                });
+            }
+
+            let html = `<div class="grid gap-3 mx-auto max-w-fit" style="grid-template-columns: repeat(${cols}, minmax(100px, 1fr));">`;
+
+            for (let i = 0; i < totalSeats; i++) {
+                const studentId = seatingArrangement[i];
+                const student = studentId ? students.find(s => s.id === studentId) : null;
+                const isSelected = selectedSeatIndex === i;
+
+                html += `
+                    <div onclick="handleSeatClick(${i})" class="seat-card ${isSelected ? 'seat-selected' : 'bg-slate-50 border-slate-200'} border-2 rounded-xl p-3 text-center cursor-pointer min-h-[85px] flex flex-col justify-center items-center transition relative">
+                        <span class="text-[10px] text-slate-400 font-bold absolute top-1 left-2">#${i + 1}</span>
+                        ${student ? `
+                            <div class="font-extrabold text-sm text-slate-800">${escapeHtml(student.name)}</div>
+                            <div class="text-[11px] font-medium text-slate-500 mt-0.5">${student.number}번</div>
+                            <span class="mt-1 px-1.5 py-0.2 rounded text-[9px] font-bold ${student.status === '출석' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${student.status}</span>
+                        ` : `
+                            <span class="text-xs text-slate-300 italic">빈 자석</span>
+                        `}
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        function handleSeatClick(index) {
+            if (selectedSeatIndex === null) {
+                // First selection
+                selectedSeatIndex = index;
+            } else if (selectedSeatIndex === index) {
+                // Deselect
+                selectedSeatIndex = null;
+            } else {
+                // Swap two seats
+                const temp = seatingArrangement[selectedSeatIndex];
+                seatingArrangement[selectedSeatIndex] = seatingArrangement[index];
+                seatingArrangement[index] = temp;
+                selectedSeatIndex = null;
+                saveToLocalStorage();
+            }
+            renderSeatingGrid();
+        }
+
+        function randomizeSeating() {
+            const cols = parseInt(document.getElementById('seat-cols').value) || 6;
+            const rows = parseInt(document.getElementById('seat-rows').value) || 5;
+            const totalSeats = cols * rows;
+
+            let shuffledStudents = [...students].sort(() => Math.random() - 0.5);
+            seatingArrangement = new Array(totalSeats).fill(null);
+
+            shuffledStudents.forEach((s, idx) => {
+                if (idx < totalSeats) seatingArrangement[idx] = s.id;
+            });
+
+            selectedSeatIndex = null;
+            renderSeatingGrid();
+            saveToLocalStorage();
+        }
+
+        function renderEvaluationTable() {
+            const tbody = document.getElementById('evaluation-tbody');
+            students.sort((a, b) => Number(a.number) - Number(b.number));
+
+            let totalClassSum = 0;
+
+            tbody.innerHTML = students.map(s => {
+                const totalScore = (Number(s.score1) || 0) + (Number(s.score2) || 0) + (Number(s.score3) || 0);
+                totalClassSum += totalScore;
+
+                let grade = 'C';
+                if (totalScore >= 90) grade = 'A';
+                else if (totalScore >= 80) grade = 'B';
+                else if (totalScore >= 70) grade = 'C';
+                else grade = 'D';
+
+                return `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="py-2.5 px-4 text-center font-bold text-slate-500">${s.number}</td>
+                        <td class="py-2.5 px-4 font-semibold text-slate-800">${escapeHtml(s.name)}</td>
+                        <td class="py-2.5 px-4 text-center">
+                            <input type="number" value="${s.score1 || 0}" min="0" max="30" onchange="updateScore(${s.id}, 'score1', this.value)" class="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </td>
+                        <td class="py-2.5 px-4 text-center">
+                            <input type="number" value="${s.score2 || 0}" min="0" max="30" onchange="updateScore(${s.id}, 'score2', this.value)" class="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </td>
+                        <td class="py-2.5 px-4 text-center">
+                            <input type="number" value="${s.score3 || 0}" min="0" max="40" onchange="updateScore(${s.id}, 'score3', this.value)" class="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </td>
+                        <td class="py-2.5 px-4 text-center font-extrabold text-indigo-700">${totalScore}점</td>
+                        <td class="py-2.5 px-4 text-center">
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${grade === 'A' ? 'bg-emerald-100 text-emerald-700' : grade === 'B' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}">${grade} 등급</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const avg = students.length > 0 ? (totalClassSum / students.length).toFixed(1) : 0;
+            document.getElementById('eval-class-avg').textContent = `${avg} 점`;
+        }
+
+        function updateScore(id, field, value) {
+            const student = students.find(s => s.id === id);
+            if (student) {
+                student[field] = Math.max(0, Number(value) || 0);
+                renderEvaluationTable();
+                saveToLocalStorage();
+            }
+        }
+
+        function renderExportTSV() {
+            const textarea = document.getElementById('export-tsv-text');
+            students.sort((a, b) => Number(a.number) - Number(b.number));
+
+            let tsv = "번호\t이름\t성별\t출결상태\t수행1\t수행2\t수행3\t총점\t비고\n";
+            students.forEach(s => {
+                const total = (Number(s.score1) || 0) + (Number(s.score2) || 0) + (Number(s.score3) || 0);
+                tsv += `${s.number}\t${s.name}\t${s.gender}\t${s.status}\t${s.score1 || 0}\t${s.score2 || 0}\t${s.score3 || 0}\t${total}\t${s.notes || ''}\n`;
+            });
+
+            textarea.value = tsv;
+        }
+
+        function copyTsvToClipboard() {
+            const textarea = document.getElementById('export-tsv-text');
+            textarea.select();
+            document.execCommand('copy');
+
+            Swal.fire({
+                icon: 'success',
+                title: '클립보드에 복사되었습니다!',
+                text: '엑셀이나 한글(HWP) 문서 표에 붙여넣기(Ctrl+V) 하세요.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        }
+
+        function downloadCSV() {
+            let csv = "\uFEFF번호,이름,성별,출결상태,수행1,수행2,수행3,총점,비고\n";
+            students.forEach(s => {
+                const total = (Number(s.score1) || 0) + (Number(s.score2) || 0) + (Number(s.score3) || 0);
+                csv += `"${s.number}","${s.name}","${s.gender}","${s.status}","${s.score1 || 0}","${s.score2 || 0}","${s.score3 || 0}","${total}","${s.notes || ''}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `학급명렬표_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        }
+
+        function downloadJSONBackup() {
+            const data = {
+                students: students,
+                pickHistory: pickHistory,
+                seatingArrangement: seatingArrangement,
+                exportedAt: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `학급관리_데이터백업_${new Date().toISOString().slice(0,10)}.json`;
+            link.click();
+        }
+
+        function importJSONBackup(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const parsed = JSON.parse(evt.target.result);
+                    if (parsed.students && Array.isArray(parsed.students)) {
+                        students = parsed.students;
+                        pickHistory = parsed.pickHistory || [];
+                        seatingArrangement = parsed.seatingArrangement || [];
+                        
+                        saveToLocalStorage();
+                        renderRosterTable();
+
+                        Swal.fire({
+                            icon: 'success',
+                            title: '데이터 복원 완료!',
+                            text: '백업 데이터를 성공적으로 불러왔습니다.',
+                            confirmButtonColor: '#4f46e5'
+                        });
+                    }
+                } catch(err) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: '파일 감지 오류',
+                        text: '올바른 JSON 백업 파일이 아닙니다.',
+                        confirmButtonColor: '#4f46e5'
+                    });
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function confirmResetDemoData() {
+            Swal.fire({
+                title: '데모 데이터로 초기화',
+                text: '현재 작성된 모든 데이터가 기본 샘플 데이터로 교체됩니다.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#e11d48',
+                cancelButtonColor: '#94a3b8',
+                confirmButtonText: '초기화 실행',
+                cancelButtonText: '취소'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    students = [...DEFAULT_DEMO_STUDENTS];
+                    pickHistory = [];
+                    seatingArrangement = [];
+                    saveToLocalStorage();
+                    renderRosterTable();
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: '초기화 완료',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                }
+            });
+        }
+
+        // Utility: Escape HTML String
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&rawgt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    </script>
+</body>
+</html>
